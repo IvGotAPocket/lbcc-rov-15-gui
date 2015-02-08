@@ -15,59 +15,23 @@ public class CLI {
 
     public static void main(String[] args) throws IOException {
 
-        BufferedReader inFromUser =
-                new BufferedReader(new InputStreamReader(System.in));
-        DatagramSocket clientSocket = new DatagramSocket();
-        InetAddress IPAddress = InetAddress.getByAddress(new byte[] {10,0,100,19});
-        byte[] sendData;
-        byte[] receiveData = new byte[1024];
-        String sentence = inFromUser.readLine();
-        sendData = sentence.getBytes();
-        DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, IPAddress, 8888);
-        clientSocket.send(sendPacket);
-        DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
-        clientSocket.receive(receivePacket);
-        String modifiedSentence = new String(receivePacket.getData());
-        System.out.println("FROM SERVER:" + modifiedSentence);
-        clientSocket.close();
+        DatagramSocket socket = new DatagramSocket(21025);
+        byte[] buffer = new byte[64];
+        DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+
+        while (true) {
+
+            socket.receive(packet);
+
+            String msg = new String(buffer, 0, packet.getLength());
+            System.out.print(packet.getAddress().getHostName());
+            System.out.print(": ");
+            System.out.println(msg);
+
+            packet.setLength(buffer.length);
+
+        }
 
     }
-
-
-
-    public static class ROV {
-
-        public static enum CommandType {
-            GET,
-            SET
-        }
-
-        private InetAddress ip;
-        private int port;
-        private byte[] secret;
-
-        public ROV (InetAddress ip, int port) {
-            this.ip = ip;
-            this.port = port;
-        }
-
-        public boolean cmd(CommandType type, byte[] params) {
-
-        }
-    }
-
-    public static boolean emit(InetAddress ip, int port, String message) {
-        try {
-            DatagramSocket clientSocket = new DatagramSocket();
-            byte[] data = message.getBytes();
-            DatagramPacket sendPacket = new DatagramPacket(data, data.length, ip, port);
-            clientSocket.send(sendPacket);
-            return true;
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-
 
 }
