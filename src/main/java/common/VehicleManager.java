@@ -5,10 +5,8 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
+import java.net.*;
+import java.util.ArrayList;
 
 public class VehicleManager {
 
@@ -18,9 +16,11 @@ public class VehicleManager {
     public static final int BROADCAST_DELAY = 3000;
 
     private DatagramSocket socket;
+    private ArrayList<Vehicle> vehicles;
 
     public VehicleManager() throws IOException {
 
+        vehicles = new ArrayList<>();
         socket = new DatagramSocket(BROADCAST_PORT);
         socket.setBroadcast(true);
 
@@ -82,7 +82,7 @@ public class VehicleManager {
                     socket.receive(packet);
                     JSONTokener tokener = new JSONTokener(new String(buffer));
                     JSONObject response = new JSONObject(tokener);
-                    processMessage(response);
+                    processMessage(response, packet.getAddress(), packet.getPort());
                     packet.setLength(buffer.length);
                     Thread.sleep(1);
                 } catch (InterruptedException e) {
@@ -96,14 +96,33 @@ public class VehicleManager {
         }
     }
 
-    private void processMessage(JSONObject response) {
+    private void processMessage(JSONObject response, InetAddress ip, int port) {
         if (response.has("pong")) {
-            System.out.println("I found an ROV: " + response.getString("pong"));
+            for (Vehicle v : vehicles) {
+                if (v.getAddress().equals(ip)) {
+                    return;
+                }
+            }
+            try {
+                Vehicle v = new Vehicle(ip, port);
+                vehicles.add(v);
+                System.out.println("I found a new ROV: " + response.getString("pong"));
+            } catch (SocketException socket) {
+                System.out.println("I found a new ROV, but I couldn't connect to it.");
+            }
         }
     }
 
     public int count() {
-        return 0;
+        return vehicles.size();
+    }
+
+    public Vehicle getFirstVehicle() {
+        if (!vehicles.isEmpty()) {
+            return vehicles.get(0);
+        } else {
+            return null;
+        }
     }
 
 }
