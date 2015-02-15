@@ -21,10 +21,6 @@ public class Vehicle {
         this.socket = new DatagramSocket();
     }
 
-    public int getPort() {
-        return port;
-    }
-
     public InetAddress getAddress() {
         return address;
     }
