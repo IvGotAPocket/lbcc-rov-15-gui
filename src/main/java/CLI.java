@@ -37,6 +37,7 @@ public class CLI {
 
         while (true) {
             stickControl();
+            Thread.sleep(10);
         }
 
         /*

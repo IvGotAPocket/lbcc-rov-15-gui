@@ -61,13 +61,13 @@ public class VehicleManager {
     }
 
     private void processMessage(JSONObject response, DatagramPacket packet) {
-        if (response.has("pong")) {
-            processPong(response, packet);
-        } else if (response.has("cmd")) {
-            if (response.getString("cmd").equals("is")) {
+        if (response.has("cmd")) {
+            if (response.getString("cmd").equals("pong")) {
+                processPong(response, packet);
+            } else if (response.getString("cmd").equals("is")) {
                 processIs(response, packet);
             } else {
-                System.out.println("Unrecognized command from ROV!");
+                System.out.println("Unrecognized command: " + response.getString("cmd"));
             }
         }
     }
@@ -85,7 +85,6 @@ public class VehicleManager {
         }
         Vehicle v = new Vehicle(packet.getAddress(), packet.getPort());
         vehicles.add(v);
-        System.out.println("I found a new ROV: " + response.getString("pong"));
     }
 
     private void processIs(JSONObject response, DatagramPacket packet) {
@@ -184,7 +183,7 @@ public class VehicleManager {
         private DatagramPacket packet;
 
         VehicleScanLoop() {
-            byte[] buffer = VehicleCommand.getPing().getBytes();
+            byte[] buffer = VehicleCommand.getPing(true).getBytes();
             packet = new DatagramPacket(buffer, buffer.length);
             packet.setAddress(broadcastAddress);
             packet.setPort(BROADCAST_PORT);

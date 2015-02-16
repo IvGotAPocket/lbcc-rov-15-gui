@@ -5,9 +5,10 @@ import org.json.JSONObject;
 
 public class VehicleCommand {
 
-    public static String getPing() {
+    public static String getPing(boolean control) {
         JSONObject ping = new JSONObject();
-        ping.put("ping", "rov");
+        ping.put("cmd", "ping");
+        ping.put("ctl", control?1:0);
         return ping.toString();
     }
 
