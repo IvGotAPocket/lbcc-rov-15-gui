@@ -14,6 +14,7 @@ public class VehicleManager {
     public static final int MAX_ARDUINO_PACKET = 64;
     public static final int BROADCAST_PORT = 21025;
     public static final int BROADCAST_DELAY = 3000;
+    public static final int UPDATE_DELAY = 500;
 
     private DatagramSocket socket;
     private ArrayList<Vehicle> vehicles;
@@ -41,7 +42,6 @@ public class VehicleManager {
     }
 
     private void spinThreads() {
-
         // Start thread that receives data.
         VehicleListenLoop listener = new VehicleListenLoop();
         Thread listenerThread = new Thread(listener);
@@ -52,12 +52,23 @@ public class VehicleManager {
         Thread scannerThread = new Thread(scanner);
         scannerThread.start();
 
+        // Start thread that sends updates to vehicles.
+        VehicleUpdateLoop updater = new VehicleUpdateLoop();
+        Thread updaterThread = new Thread(updater);
+        updaterThread.start();
+
         System.out.println("[VehicleManager] Scanning with port " + BROADCAST_PORT);
     }
 
     private void processMessage(JSONObject response, DatagramPacket packet) {
         if (response.has("pong")) {
             processPong(response, packet);
+        } else if (response.has("cmd")) {
+            if (response.getString("cmd").equals("is")) {
+                processIs(response, packet);
+            } else {
+                System.out.println("Unrecognized command from ROV!");
+            }
         }
     }
 
@@ -66,23 +77,36 @@ public class VehicleManager {
      * Use pongs to maintain contact and understand the ROV.
      */
     private void processPong(JSONObject response, DatagramPacket packet) {
-
         for (Vehicle v : vehicles) {
             if (v.getAddress().equals(packet.getAddress())) {
+                v.setLastComm();
                 return;
             }
         }
-
-        try {
-            Vehicle v = new Vehicle(packet.getAddress(), packet.getPort());
-            vehicles.add(v);
-            System.out.println("I found a new ROV: " + response.getString("pong"));
-        } catch (SocketException socket) {
-            System.out.println("I found a new ROV, but I couldn't connect to it.");
-        }
-
+        Vehicle v = new Vehicle(packet.getAddress(), packet.getPort());
+        vehicles.add(v);
+        System.out.println("I found a new ROV: " + response.getString("pong"));
     }
 
+    private void processIs(JSONObject response, DatagramPacket packet) {
+        for (Vehicle v : vehicles) {
+            if (v.getAddress().equals(packet.getAddress())) {
+                if (response.has("c") && response.has("v")) {
+                    try {
+                        int chn = response.getInt("c");
+                        int val = response.getInt("v");
+                        v.setLastComm();
+                        v.setLastKnown(chn, val);
+                        return;
+                    } catch (Exception e) {
+                        System.out.println("Error while processing last known.");
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+        System.out.println("Holy hand grenades, how did this happen?");
+    }
 
     // ========================================================================
     //  Threads
@@ -118,6 +142,38 @@ public class VehicleManager {
     }
 
 
+    /**
+     * Continuously sends value update packages to ROVs.
+     */
+    private class VehicleUpdateLoop implements Runnable {
+        @Override
+        public void run() {
+            while (true) {
+                vehicles.forEach(VehicleManager.this::sendUpdate);
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    private void sendUpdate(Vehicle v) {
+        JSONObject command = VehicleCommand.getSet(v);
+        if (command == null) return;
+        System.out.println("Sending updated values to ROV.");
+        String message = command.toString();
+        byte[] buffer = message.getBytes();
+        DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+        packet.setAddress(v.getAddress());
+        packet.setPort(v.getPort());
+        try {
+            socket.send(packet);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 
     /**
      * Continuously broadcasts requests for ROVs to make themselves known.
