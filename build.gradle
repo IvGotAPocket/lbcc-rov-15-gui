@@ -7,7 +7,34 @@ repositories {
 }
 
 dependencies {
-    compile group: 'org.lwjgl.lwjgl', name: 'lwjgl', version: '2.9.3'
     compile group: 'org.json', name: 'json', version: '20141113'
+    compile group: 'org.lwjgl.lwjgl', name: 'lwjgl', version: '2.9.3'
+    compile group: 'org.lwjgl.lwjgl', name: 'lwjgl-platform', version: '2.9.3'
     testCompile group: 'junit', name: 'junit', version: '4.11'
+}
+
+def listNativePaths() {
+    ArrayList<Object> paths = new ArrayList<>();
+    configurations.compile.each { file ->
+        if (file.name.contains("natives")) {
+            zipTree(file).matching {
+                exclude {
+                    it.path.contains('META-INF')
+                }
+            }.each {
+                paths.add(it)
+            }
+        }
+    }
+    return paths
+}
+
+task natives(type: Sync) {
+    from listNativePaths()
+    into "$buildDir/libs"
+}
+
+tasks.withType(Test) {
+    dependsOn natives
+    systemProperty "java.library.path", "$buildDir/libs"
 }
