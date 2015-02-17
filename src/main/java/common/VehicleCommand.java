@@ -8,7 +8,7 @@ public class VehicleCommand {
     public static String getPing(boolean control) {
         JSONObject ping = new JSONObject();
         ping.put("cmd", "ping");
-        ping.put("ctl", control?1:0);
+        ping.put("ctl", control);
         return ping.toString();
     }
 

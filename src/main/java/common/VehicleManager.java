@@ -62,7 +62,9 @@ public class VehicleManager {
 
     private void processMessage(JSONObject response, DatagramPacket packet) {
         if (response.has("cmd")) {
-            if (response.getString("cmd").equals("pong")) {
+            if (response.getString("cmd").equals("ping")) {
+                // ignore it
+            } else if (response.getString("cmd").equals("pong")) {
                 processPong(response, packet);
             } else if (response.getString("cmd").equals("is")) {
                 processIs(response, packet);
@@ -84,7 +86,9 @@ public class VehicleManager {
             }
         }
         Vehicle v = new Vehicle(packet.getAddress(), packet.getPort());
+        v.setDetails(response.getInt("chn"), response.getBoolean("ctl"));
         vehicles.add(v);
+        System.out.println("Now tracking new vehicle!");
     }
 
     private void processIs(JSONObject response, DatagramPacket packet) {

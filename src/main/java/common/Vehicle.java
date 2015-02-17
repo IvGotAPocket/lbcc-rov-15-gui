@@ -10,6 +10,8 @@ public class Vehicle {
 
     private long lastComm;
     private long timeout;
+    private int channelCount;
+    private boolean controlling;
 
     protected ArrayList<Channel> channels;
 
@@ -28,6 +30,15 @@ public class Vehicle {
         this.address = address;
         this.port = port;
         this.channels = new ArrayList<>();
+    }
+
+    protected void setDetails(int channelCount, boolean controlling) {
+        if (channelCount < 0) throw new IllegalArgumentException();
+        if (channelCount > 99) throw new IllegalArgumentException();
+        this.channelCount = channelCount;
+        this.controlling = controlling;
+        System.out.println("Vehicle details: " + channelCount + " channels.");
+        System.out.println("Vehicle details: Controlling: " + controlling);
     }
 
     protected void setLastComm() {
