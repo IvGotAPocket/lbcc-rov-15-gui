@@ -1,5 +1,7 @@
 package common;
 
+import org.lwjgl.Sys;
+
 import java.net.InetAddress;
 import java.util.ArrayList;
 
@@ -16,14 +18,52 @@ public class Vehicle {
     protected ArrayList<Channel> channels;
 
     public static class Channel {
+
         protected int number;
-        protected String name;
-        protected boolean readonly;
-        protected int minimum;
-        protected int maximum;
+
+        private String name;
+        private boolean readonly;
+        private int minimum;
+        private int maximum;
+
         protected int current;
-        protected int lastKnown;
-        protected long lastComm;
+
+        private int lastKnown;
+        private long lastComm;
+
+        protected String getName() {
+            return name;
+        }
+
+        protected void setCurrent(int value) {
+            if (value > maximum) throw new IllegalArgumentException();
+            if (value < minimum) throw new IllegalArgumentException();
+            current = value;
+        }
+
+        protected void setChannelInfo(String name, boolean readonly, int min, int max) {
+            if (min > max) throw new IllegalArgumentException("ROV is confused about range on channel " + number);
+            this.name = name;
+            this.readonly = readonly;
+            this.minimum = min;
+            this.maximum = max;
+            this.lastKnown = -1;
+            this.lastComm = -1;
+        }
+
+        protected void setLastKnown(int value) {
+            // No range checks here, just report what we were told by the ROV.
+            lastKnown = value;
+            lastComm = System.currentTimeMillis();
+        }
+
+        protected int getLastKnown() {
+            return lastKnown;
+        }
+
+        protected long getLastComm() {
+            return lastComm;
+        }
     }
 
     protected Vehicle(InetAddress address, int port) {
@@ -61,6 +101,10 @@ public class Vehicle {
 
     protected int getPort() {
         return port;
+    }
+
+    protected int getChannelCount() {
+        return this.channelCount;
     }
 
 

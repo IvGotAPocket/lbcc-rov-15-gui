@@ -12,11 +12,17 @@ public class VehicleCommand {
         return ping.toString();
     }
 
-    public static JSONObject getSet(Vehicle v) {
+    public static String getList() {
+        JSONObject ping = new JSONObject();
+        ping.put("cmd", "list");
+        return ping.toString();
+    }
+
+    public static String getSet(Vehicle v) {
         JSONArray list = new JSONArray();
         for (int i = 0; i < v.channels.size(); i++) {
             int cur = v.channels.get(i).current;
-            int pas = v.channels.get(i).lastKnown;
+            int pas = v.channels.get(i).getLastKnown();
             if (cur != pas) {
                 JSONObject entry = new JSONObject();
                 entry.put("c", i+1);
@@ -27,7 +33,7 @@ public class VehicleCommand {
         JSONObject bundle = new JSONObject();
         bundle.put("cmd", "set");
         bundle.put("list", list);
-        return (list.length() > 0) ? bundle : null;
+        return (list.length() > 0) ? bundle.toString() : null;
     }
 
 }

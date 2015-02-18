@@ -1,6 +1,7 @@
 import common.Vehicle;
 import common.VehicleManager;
 import org.lwjgl.LWJGLException;
+import org.lwjgl.Sys;
 import org.lwjgl.input.Controller;
 import org.lwjgl.input.Controllers;
 
@@ -29,29 +30,30 @@ public class CLI {
         System.out.println();
         System.out.println("Searching for ROVs");
 
-        while (manager.count() < 1) {
-            Thread.sleep(10);
-        }
+        // Locks the thread!!
+        rov = manager.waitForFirst();
 
-        rov = manager.getFirstVehicle();
 
         while (true) {
             stickControl();
             Thread.sleep(10);
         }
 
+
         /*
         Scanner sc = new Scanner(System.in);
         while (sc.hasNextLine()) {
             try {
                 int c = Integer.parseInt(sc.nextLine());
-                System.out.println("Setting new value.");
-                v.set(1, c);
+                rov.set(1, 2500-c);
+                rov.set(2, c);
             } catch (NumberFormatException e) {
                 System.out.println("Not a number.");
             }
         }
         */
+
+
     }
 
 
@@ -82,48 +84,43 @@ public class CLI {
     {
         xbox.poll(); //needed command to get info from controller
 
-        double MIN_STICK = .09*500;
-        double resultant, theta;
-        double STOP = 1000;
+        double MIN_STICK = .09*250;
+        double magnitude, theta;
+        int STOP = 1250;
 
-        double stick_l_ud = xbox.getAxisValue(0)*500, //multiply by 500 to convert thumbstick to correct range
-                stick_l_lr = xbox.getAxisValue(1)*500,
-                stick_r_lr = xbox.getAxisValue(2)*500,
-                stick_r_ud = xbox.getAxisValue(3)*500;
+        double stick_l_ud = xbox.getAxisValue(0)*250; // forward/backward
+        double stick_l_lr = xbox.getAxisValue(1)*250; // strafe left/right
 
-        if( (Math.abs(stick_l_ud)>MIN_STICK) || (Math.abs(stick_l_lr)>MIN_STICK) ) //Left Stick
+        double stick_r_lr = xbox.getAxisValue(2)*250; // turn left/right
+        double stick_r_ud = xbox.getAxisValue(3)*250; // tilt forward/back
+
+        if (Math.abs(stick_l_ud) > MIN_STICK || Math.abs(stick_l_lr) > MIN_STICK)
         {
-            resultant = Math.sqrt( Math.pow(stick_l_lr,2) + Math.pow(stick_l_ud,2) ); //sqrt((lr+ud)^2)
-            theta = ( Math.atan(stick_l_ud / stick_l_lr) ) - Math.PI/4;
+            magnitude = Math.sqrt(Math.pow(stick_l_lr,2) + Math.pow(stick_l_ud,2));
 
-            // Adjust theta based on quadrant. Add 180 deg if angle in Q3 or Q4
-            if( stick_l_ud < 0)
-                theta += Math.PI;
+            // Find angle of resulting vector
+            theta = Math.atan(-stick_l_ud / stick_l_lr);
+            if (stick_l_lr < 0) theta += Math.PI;
+            if (theta < 0) theta += 2*Math.PI;
 
-            //System.out.println("1 "+ resultant*Math.cos(theta)*(5.0/7) + " " + stick_l_lr + " " + stick_l_ud);
-            //System.out.println("2 "+ resultant*Math.sin(theta)*(5.0/7) + " " + stick_l_lr + " " + stick_l_ud);
+            double thetaRotated = theta - Math.PI/4;
 
-            // Set a single value for now.
-            int value = (int) Math.round(resultant*Math.cos(theta)*(5.0/7)) + 1000;
-            boolean success = rov.set(1, value);
-            if (!success) System.out.println("Unable to set: " + value);
+            double sternPortVectorAngle = Math.PI * 7/4;
+            double sternStarboardVectorAngle = Math.PI * 1/4;
 
-        }
+            int chan1 = (int) Math.round(magnitude * Math.cos(thetaRotated)) + STOP;
+            int chan2 = (int) Math.round(magnitude * Math.sin(thetaRotated)) + STOP;
 
-        // We need to decide what the right stick does, exactly.  Probably left/right turn, and up/down tilt?
-        if( (Math.abs(stick_r_ud)>MIN_STICK) || (Math.abs(stick_r_lr)>MIN_STICK) ) //Right Stick
-        {
-            resultant = Math.sqrt( Math.pow(stick_r_lr,2) + Math.pow(stick_r_ud,2) ); //sqrt((lr+ud)^2)
-            theta = ( Math.atan(stick_r_ud / stick_r_lr) ) - Math.PI/4;
+            System.out.print("Motor 0: " + chan1);
+            System.out.println("\tMotor 1: " + chan2);
+//          System.out.println("Angle: " + Math.round(theta * 180 / Math.PI));
 
-            // Adjust theta based on quadrant. Add 180 deg if angle in Q3 or Q4
-            if( stick_r_ud < 0)
-                theta += Math.PI;
-            // Multiply by 5/7 to scale down to range 500 to 1500
-            //System.out.println("3 "+ resultant*Math.cos(theta)*(5.0/7) + " " + stick_r_lr + " " + stick_r_ud);
-            //System.out.println("4 "+ resultant*Math.sin(theta)*(5.0/7) + " " + stick_r_lr + " " + stick_r_ud);
+            rov.set(1, chan1);
+            rov.set(2, chan2);
 
-            //v.set(0, resultant*Math.cos(theta)+1000);
+        } else {
+            rov.set(1, STOP);
+            rov.set(2, STOP);
         }
     }
 }

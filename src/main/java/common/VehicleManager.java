@@ -1,17 +1,20 @@
 package common;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
+import org.lwjgl.Sys;
 
 import java.io.IOException;
 import java.net.*;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 public class VehicleManager {
 
     public static final String COMM_VERSION = "0.1-JSON";
-    public static final int MAX_ARDUINO_PACKET = 64;
+    public static final int MAX_ARDUINO_PACKET = 2048;
     public static final int BROADCAST_PORT = 21025;
     public static final int BROADCAST_DELAY = 3000;
     public static final int UPDATE_DELAY = 500;
@@ -33,12 +36,11 @@ public class VehicleManager {
         return vehicles.size();
     }
 
-    public Vehicle getFirstVehicle() {
-        if (!vehicles.isEmpty()) {
-            return vehicles.get(0);
-        } else {
-            return null;
+    public Vehicle waitForFirst() throws InterruptedException {
+        while (vehicles.isEmpty()) {
+            Thread.sleep(10);
         }
+        return vehicles.get(0);
     }
 
     private void spinThreads() {
@@ -62,14 +64,22 @@ public class VehicleManager {
 
     private void processMessage(JSONObject response, DatagramPacket packet) {
         if (response.has("cmd")) {
-            if (response.getString("cmd").equals("ping")) {
-                // ignore it
-            } else if (response.getString("cmd").equals("pong")) {
-                processPong(response, packet);
-            } else if (response.getString("cmd").equals("is")) {
-                processIs(response, packet);
-            } else {
-                System.out.println("Unrecognized command: " + response.getString("cmd"));
+            switch (response.getString("cmd")) {
+                case "ping":
+                    // Ignore broadcast echo.
+                    break;
+                case "pong":
+                    processPong(response, packet);
+                    break;
+                case "chn":
+                    processChn(response, packet);
+                    break;
+                case "is":
+                    processIs(response, packet);
+                    break;
+                default:
+                    System.out.print("Unrecognized command: ");
+                    System.out.println(response.getString("cmd"));
             }
         }
     }
@@ -89,26 +99,111 @@ public class VehicleManager {
         v.setDetails(response.getInt("chn"), response.getBoolean("ctl"));
         vehicles.add(v);
         System.out.println("Now tracking new vehicle!");
+
+        // Temporary!
+        // Ask the ROV to send us info about each channel.
+        // The ROV will be "disabled" until we get everything.
+        sendListCommand(v);
     }
+
+    private void processChn(JSONObject response, DatagramPacket packet) {
+        for (Vehicle v : vehicles) {
+            if (v.getAddress().equals(packet.getAddress())) {
+
+                // Verification
+                if (response.getInt("num") < 1) throw new IllegalArgumentException();
+                if (response.getInt("num") > v.getChannelCount()) throw new IllegalArgumentException();
+
+                // Lookup channel
+                Vehicle.Channel channel = null;
+                boolean isChannelNew = false;
+
+                for (Vehicle.Channel c : v.channels) {
+                    if (c.number == response.getInt("num")) {
+                        channel = c;
+                    }
+                }
+                if (channel == null) {
+                    channel = new Vehicle.Channel();
+                    channel.number = response.getInt("num");
+                    isChannelNew = true;
+                }
+
+                // Apply settings
+                channel.setChannelInfo(
+                        response.getString("name"),
+                        response.getBoolean("read"),
+                        response.getInt("min"),
+                        response.getInt("max")
+                );
+
+                // Apply last known value included
+                channel.setLastKnown(response.getInt("now"));
+
+                if (isChannelNew) {
+                    // Set current value to last known, later code change current.
+                    // This is so we accept the ROVs default values.
+                    channel.current = channel.getLastKnown();
+                    // Add the channel to the list.
+                    v.channels.add(channel);
+                    System.out.println("Added new channel: " + channel.getName());
+                }
+
+                return;
+            }
+        }
+        System.out.println("NOT POSSIBRU");
+    }
+
 
     private void processIs(JSONObject response, DatagramPacket packet) {
         for (Vehicle v : vehicles) {
             if (v.getAddress().equals(packet.getAddress())) {
-                if (response.has("c") && response.has("v")) {
-                    try {
-                        int chn = response.getInt("c");
-                        int val = response.getInt("v");
-                        v.setLastComm();
-                        v.setLastKnown(chn, val);
-                        return;
-                    } catch (Exception e) {
-                        System.out.println("Error while processing last known.");
-                        e.printStackTrace();
-                    }
+
+                JSONArray list = response.getJSONArray("list");
+
+                for (int i = 0; i < list.length(); i++) {
+                    JSONObject entry = list.getJSONObject(i);
+                    int channel = entry.getInt("c");
+                    int value = entry.getInt("v");
+                    v.channels.get(channel-1).setLastKnown(value);
                 }
+
+                v.setLastComm();
             }
         }
-        System.out.println("Holy hand grenades, how did this happen?");
+    }
+
+    // ========================================================================
+    //  Send Commands
+    // ========================================================================
+
+    private void sendUpdate(Vehicle v) {
+        String command = VehicleCommand.getSet(v);
+        if (command == null) return;
+        System.out.println("Sending updated values to ROV.");
+        byte[] buffer = command.getBytes();
+        DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+        packet.setAddress(v.getAddress());
+        packet.setPort(v.getPort());
+        try {
+            socket.send(packet);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void sendListCommand(Vehicle v) {
+        byte[] buffer = VehicleCommand.getList().getBytes();
+        DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+        packet.setAddress(v.getAddress());
+        packet.setPort(v.getPort());
+        try {
+            socket.send(packet);
+            System.out.println("Sending list command to ROV.");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     // ========================================================================
@@ -138,7 +233,8 @@ public class VehicleManager {
                 } catch (IOException e) {
                     System.out.println("VehicleListenLoop IO exception!");
                 } catch (JSONException e) {
-                    System.out.println("VehicleListenLoop JSON exception!!");
+                    System.out.println("VehicleListenLoop JSON exception!");
+                    System.out.println(new String(packet.getData()));
                 }
             }
         }
@@ -159,22 +255,6 @@ public class VehicleManager {
                     e.printStackTrace();
                 }
             }
-        }
-    }
-
-    private void sendUpdate(Vehicle v) {
-        JSONObject command = VehicleCommand.getSet(v);
-        if (command == null) return;
-        System.out.println("Sending updated values to ROV.");
-        String message = command.toString();
-        byte[] buffer = message.getBytes();
-        DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-        packet.setAddress(v.getAddress());
-        packet.setPort(v.getPort());
-        try {
-            socket.send(packet);
-        } catch (IOException e) {
-            e.printStackTrace();
         }
     }
 
